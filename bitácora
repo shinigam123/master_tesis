@@ -2,4 +2,88 @@ Martes 28 de Marzo
 Se descargó en el archivo  TAIR10_chr_all.fas:
 https://www.arabidopsis.org/download/index-auto.jsp?dir=%2Fdownload_files%2FGenes%2FTAIR10_genome_release%2FTAIR10_chromosome_files
 que consiste en el genoma de arabidopsis con todos los cromosomas, para realizar el ensamble del transcriptoma con Guided Trinity. 
+Descarga de datos de GEO, los restantes de hypocotyl. 
+usando : ./sratoolkit.2.8.1-3-centos_linux64/bin/fastq-dump [SRR] -O [output]
+
+#####
+31 de Marzo
+Se examinó la calidad de las secuencias con el programa fastq de los datos en el directorio /LUSTRE/usuario/igarcia/ hypocotyl
+Se ejecutó el siguiente programa en mazorka para checar la calidad (fastq_results_hypo1.sh):
+#!/bin/bash
+#PBS -N hypo1
+#PBS -l nodes=1:ppn=10,vmem=4gb,mem=4gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+cd "/LUSTRE/usuario/igarcia/hypocotyl"
+module load FastQC/0.11.2
+for filename in *.fastq
+do
+ fastqc $filename
+done
+
+#####
+1 de Abril 
+Se examinó la secuencia copiando los archivos html generados por fasqc a el Escritorio para su visualización con el siguiente comando:
+scp -r igarcia@mazorka.langebio.cinvestav.mx:/LUSTRE/usuario/igarcia/hypocotyl/fastq_html_sin_cortar /home/irving/Escritorio 
+(Se abre terminal desde el home y no desde el cluster)
+ 
+#####
+2 de Abril
+Metodología del artículo Integrative Annotation of Human Large Intergenic Non-Coding RNAs Cabili et al 
+Mat Sup.
+Mapeo de lecturas de RNA-seq
+Procesos de mapeo en dos pasos: Tophat primero usa bowtie para alinear lecutras que son directamente mapeadas al genoma. A continuación, determina la posible ubicación de las brechas en la alineación basados en los sitios de splicing canónicos y no canónicos flanqueando las lecturas alineadas.
+Finalmente usa alineaciones "gapped" para alinear las lecturas que no fueron alineadas por bowtie en el primer paso. 
+Ensamble de transcriptoma
+El transcriptoma de cada muestra fue ensamblada de las lecturas mapeadas por separado por Sripture y Cufflinks. Cufflinks y Scripture son ensambladores de transcriptoma ab-initio que reconstruyen el transcriptoma basado en lecturas de RNA-seq que fueron alineadas al el genoma usando alineadores de lectura de splicing (e.g. TopHat).
+Ambos métodos usan información de lectura de spliced para determinar la conectividad de exones, pero con dos enfoques diferentes. 
+Scripture usa un modelo estadístico de segmentación para distinguir locus expresados de ruido experimental y usa lecturas como splicing para ensamblar segmentos expresados. Reporta todas las isoformas estadísticamente significativas expresadas en un locus dado. Cufflinks usa un modelo probabilístico para ensamblar simultáneamente y cuantificar el nivel de expresión de un conjunto mínimo de isoformas que proporcionan una explicación de probabilidad máxima de los datos de expresión en un locus dado. 
+Scripture emplea un umbral de significancia en los niveles de expresión para filtrar los transcritos y reporta todas las isoformas significativamente expresadas, Cufflinks un conjunto mínimo de isoformas que explica la expresión de un locus dado sin emplear dicho umbral. 
+
+Pipeline de clasificación de los lincRNA
+Selección de tamaño: Exclusión de transcritos de un exón y menores a 200 bases
+Umbral mínimo de cobertura de lectura: Eliminación de trasnscritos con una covertura máxima por debajo de tres lecturas por base. Este umbral de covertura se estableción mediante la optimización de la sensibilidad y la especicidad de la identificación de transcritos de logitud completa vs longitud parcial de los genes que codifican proteínas anotados en RefSeq o genes que no codifican anotados en UCSC. 
+Filtros de anotaciones conocidas de no lincRNAs: Se eliminaron todos los trnascritos que tienen un exón sobrelapando un transcrito de uno de los siguientes conjuntos: a) genes codificantes anotados en RedSeq, GENCODE 4 o UCSC, b) miRNA, tRNAs, snoRNAs, rRNAs anotados en Ensembl, c) Pseudogenes.
+Umbral de potencial de codificación positiva: Estimación para cada transcrito el grado de presión evolutiva en sustituciones de secuencia que actuán para conservar un marco de lectura abierto. Anotamos el potencial de codificación de otods los transcritos que permanecieron usando PhyloCSF (Frecuencia de sustitución de codones filogenética). Determina si un alineación de secuencia de nucleotidos de especies múltiples en un locus específico es más probable para representar una codificación de la proteína a un transcrito no codificante. Para ello se aplica un modelo probabilístico que examina las sobre-representación de las características firmas evolutivas de alineamientos de regiones codificantes conservadas, tales como las altas frecuencas de sutitucines de de codon sinónimos y sustitución de aminoácidos conservados. Se excluyen de el catálogo todos los transcritos que contienen un puntaje PhyloCSF mayor a 100. 
+Filtro de dominio de proteína conocido: Evaluación de cuales de los transcritos que permanecieron contienen un dominio conocido que codifica a una proteína. Tradujimos cada transcrito en todos los tres marcos posibles y usamos HMMER-3 para identificar la ocurrencia de cualquiera de los 31912 dominios conocidos de la familia de proteínas documentadas en la base de Pfam. Se excluyen transcritos con un hit en Pfam que se declare significantes. 
+Clasificación intergénica: Clasificación de todos los transcritos permanecientes que no sobrelapan la región genómica de una anotación no conocida de lincRNA como potencial lincRNA.
+Para obtener un conjunto único de lincRNAs que incluyen las anotaciones previas usamos Cuffcomare para intergras los RNA-seq derivados de lincRNAs con el conjunto predeterminado de lincRNAs previamente anotados por RedSeq, UCSC o GENCODE lincRNA como lincRNA potencial.
+
+#####
+3 de Abril 2017
+Los archivos .fastq se cortaron con trimmomatic con los siguientes parametros cambiando solo el parámetro minlen de 60 a 80:
+----------------------------------------------------------------------------------------------------------
+#PBS -N trimmo_hypo1
+#PBS -l nodes=5:ppn=20,vmem=28gb:mem=28gb,walltime=50:00:00
+#PBS -q default
+#PBS -V
+
+
+cd /LUSTRE/usuario/igarcia/hypocot
+module load Trimmomatic/0.32
+module load java/1.8
+for file in *.fastq
+do
+java -jar /data/software/Trimmomatic-0.32/trimmomatic-0.32.jar SE -threads 4 $file $file.trimmed.fastq \
+ILLUMINACLIP:TruSeq3-SE.fa:2:30:10 HEADCROP:10 SLIDINGWINDOW:4:15 MINLEN:80
+done
+--------------------------------------------------------------------------------------------------------
+Para despues volver a correr el ciclo fastqc para examinar nuestros datos ya recortados con trimmomatic.
+Por otra parte se realizó un índice con bowtie 2 usando el genoma TAIR10 de Arabidopsis:
+-------------------------------------------------------------
+#!/bin/bash
+#PBS -N bwt_build
+#PBS -l nodes=1:ppn=10,vmem=10gb,mem=10gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+
+module load bowtie2/2.3.0 
+cd /LUSTRE/usuario/igarcia/hypocotyl
+bowtie2-build TAIR10_chr_all.fas TAIR10_chr_all
+------------------------------------------------------------
+Los archivos .bt2 se alojaron en el directorio TAIR10
+
+#####
+4 de Abril 2017
+Teniendo los archivos ya cortados y nuestro índice en bowtie2 es hora de empezar el mapeo utilizando el programa TopHat
 
