@@ -86,4 +86,79 @@ Los archivos .bt2 se alojaron en el directorio TAIR10
 #####
 4 de Abril 2017
 Teniendo los archivos ya cortados y nuestro índice en bowtie2 es hora de empezar el mapeo utilizando el programa TopHat
+Recordatorio de comandos para git:
+git init
+git status
+git add <archivo> git add rastrea el archivo
+git status - para revisar que el cambio se efectuó
+git commit -m "comentario a escribir"
+
+Para actualizar los repositorios en github usas los siguientes comandos:
+git remote -v 
+git push origin master - te va a pedir el usuario que es shinigam123 y la contraseña que es mastergamer2390
+
+#####
+5 de Abril de 2017
+Se inició la alineación usando tophat. Se empleó el siguiente programa.
+---------------------------------------------------------------------------------------------------
+#PBS -N tophat_h_170
+#PBS -l nodes=2:ppn=16,vmem=10gb:mem=10gb,walltime=50:00:00
+#PBS -q default
+#PBS -V
+
+
+
+cd /LUSTRE/usuario/igarcia/hypocot
+module load bowtie2/2.2.9
+module load  tophat/2.1.1
+#for file in *.trimmed.fastq
+#do
+tophat -i 20 -I 500 --read-edit-dist 3 --read-realign-edit-dist 0 --library-type fr-firststrand \
+-g 1 -o tophat_out_170 TAIR10_chr_all SRR3480170.fastq.trimmed.fastq
+#done
+-----------------------------------------------------------------------------------------------------
+Es necesario cargar el módulo de bowtie para correr tophat. Los output del tophat son los siguientes:
+accepted_hits.bam      deletions.bed   junctions.bed  prep_reads.info
+align_summary.txt     insertions.bed   logs           unmapped.bam
+
+cambiamos el nombre del archivo.bam "accepted_hits.bam" a "ara_h_<número_de_archivo_SRR>.bam" ejemplo: ara_h_173.bam y la h pertenece al tejido hipocotilo 
+Los parametros de tophat fueron los siguientes: tamaño minimo del intron (-i):20, tamaño máximo del intron (-I):500, read-edit-dist: 3, read-align-edit-dist:0, tipo de libreria (library-type): fr-firststrand, -g 1, output (-o): tophat_out_<número_SRR>, índice de bowtie: TAIR_chr_all (este debe estar en el mismo directorio con todos los archivos .bt2 y por último el archivo ya cortado por trimmomatic, en nuestro caso la extensión final que permite reconocer nuestro archivo cortado es .trimmed.fastq
+
+#####
+6 de Abril de 2017 
+Se ejecutó el programa samtools para generar un índice:
+-----------------------------------------------------------------------------------------------------
+#PBS -N samt_h_index_all
+#PBS -l nodes=2:ppn=16,vmem=10gb:mem=10gb,walltime=50:00:00
+#PBS -q default
+#PBS -V
+
+cd /LUSTRE/usuario/igarcia/hypocot
+module load  samtools/1.3.1
+for file in tophat_out_*
+do
+samtools index $file/ara_h_*.bam
+done
+-----------------------------------------------------------------------------------------------------
+Esto nos dio el output con el nombre "ara_h_173.bam.bai", el cual será utilizado posteriormente.
+
+#####
+7 de Abril
+Se ejecutó el ensamblador Trinity con la opción de utilizar un genoma de referencia con el siguiente programa:
+-----------------------------------------------------------------------------------------------------
+#PBS -N trinity_h_170
+#PBS -l nodes=3:ppn=60,vmem=60gb:mem=60gb,walltime=100:00:00
+#PBS -q default
+#PBS -V
+
+
+module load trinity/2.4.0
+module load  java/1.8
+cd /LUSTRE/usuario/igarcia/hypocot
+Trinity --genome_guided_bam tophat_out_170/ara_h_170.bam --max_memory 60G \
+        --genome_guided_max_intron 1000 --CPU 60
+----------------------------------------------------------------------------------------------------
+Es importante cargar java. Para poder ensamblar con Trinity de forma guiada necesitamos el archivo .bam resultado de nuestro tophat.
+
+ 
 
