@@ -160,5 +160,627 @@ Trinity --genome_guided_bam tophat_out_170/ara_h_170.bam --max_memory 60G \
 ----------------------------------------------------------------------------------------------------
 Es importante cargar java. Para poder ensamblar con Trinity de forma guiada necesitamos el archivo .bam resultado de nuestro tophat.
 
+#####
+10 de Abril de 2017
+
+Tipos de librerias:
+Sin estrangulación es la más simple: La direccionalidad del mRNA no se conservó. Usted obtiene lecturas que también son antisentido para el mRNA (e idealmente deberían ser mitad / mitad)
+Firststrand: Se conserva la direccionalidad, y se secuencia la primera cadena que se genera. La lectura que obtenga debe ser equivalente a la direccionalidad del ARNm, y usted viene desde la derecha (extremo 3 'del ARNm).
+ Secondstrand: Se conserva la direccionalidad, y se secuencian la segunda cadena (de nuevo sentido a mRNA) que se genera. La lectura que obtenga debe ser equivalente en la direccionalidad al complemento inverso del ARNm, y se llega desde la izquierda (extremo 5 'del ARNm).
  
+https://dbrg77.wordpress.com/2015/03/20/library-type-option-in-the-tuxedo-suite/ 
+Link para saber que tipo de libreria es
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###################
+25 de abril 2017
+
+Se ensamblaron las siguientes librerias 
+
+drwxrwxr-x 3 igarcia igarcia 4,0K abr 25 18:08 trinity_out_dir_177
+drwxrwxr-x 3 igarcia igarcia 4,0K abr 25 16:32 trinity_out_dir_180
+drwxrwxr-x 3 igarcia igarcia 4,0K abr 25 17:03 trinity_out_dir_181
+drwxrwxr-x 2 igarcia igarcia 4,0K abr 25 18:15 trinity_out_dir_184
+
+en espera:
+169606.mazorka          igarcia     ensam    trinity_h_188       --      1      4     200gb 100:00:00 Q       -- 
+169607.mazorka          igarcia     ensam    trinity_h_190       --      1      4     200gb 100:00:00 Q       -- 
+169608.mazorka          igarcia     ensam    trinity_h_191       --      1      4     200gb 100:00:00 Q       -- 
+
+
+26 de Abril 2017
+Se empezó a evaluar la integridad del transcriptoma por una serie de metodos establecidos en la página de github de Trinity:
+https://github.com/trinityrnaseq/trinityrnaseq/wiki/Transcriptome-Assembly-Quality-Assessment
+Empezando con el conteo de transcritos de trinity de longitud completa. Esto es una métrica para la evaluación de la calidad del ensamble 
+del transcriptoma. Es para examinar el número de transcritos que fueron ensamblados que parecen ser de longitud completa o cercanos a su longitud completa. 
+Tal análisis con un conjunto de transcritos de referencia, tales como el de humano o ratón , es relativamente sencillo, desde que uno puede alinear los
+transcritos ensamblados a los transcritos de referencia y examinar la covertura de longitud. Para organismos no modelos, no se dispone de estos transcritos dereferencia. Si una anotacion de alta calidad existe para un organismo relacionado cercanamente, entonces uno puede comparar los trasncritos ensamblados con 
+ese transcriptoma estrechamente relacionado para examinar la covertura completa. En otros casos, un análisis más general para realizar es alinear los 
+transcritos ensamblados contra todas las proteínas conocidas. 
+Trinity soporta estos análisis usando Blast+
+bases de datos de proteinas para la busqueda inclueyen:
+SwissProt
+TrEMBL
+
+Para examinar la extensión de los alineamientos con BLAST de coincidencia superior. Primero se corrio un Blast, y entonces corrimos el script siguiente:
+Construcción de una base de datos basttable 
+Descargamos la base de datos de proteinas uniprot_sprot.fasta ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz
+make_blast.sh
+########################################################################
+PBS -N blast_database
+#PBS -l nodes=1:ppn=16,vmem=10gb:mem=10gb,walltime=50:00:00
+#PBS -q default
+#PBS -V
+
+module load ncbi-blast+/2.6.0
+cd /LUSTRE/usuario/igarcia/hypocot
+makeblastdb -in uniprot_sprot.fasta -dbtype prot
+####################################################################
+
+El script anterior nos arrojó los siguientes output:
+-rw-rw-r-- 1 igarcia igarcia  97M abr 26 10:49 uniprot_sprot.fasta.phr
+-rw-rw-r-- 1 igarcia igarcia 4,3M abr 26 10:49 uniprot_sprot.fasta.pin
+-rw-rw-r-- 1 igarcia igarcia 190M abr 26 10:49 uniprot_sprot.fasta.psq
+
+Después se realizó la búsqueda de blast, reportando solo el alineamiento superior con el siguiente script:
+#PBS -N blast_db_170
+#PBS -l nodes=1:ppn=16,vmem=10gb:mem=10gb,walltime=50:00:00
+#PBS -q default
+#PBS -V
+
+module load ncbi-blast+/2.6.0
+cd /LUSTRE/usuario/igarcia/hypocot/trinity_out_dir_170
+blastx -query Trinity-GG.fasta -db /LUSTRE/usuario/igarcia/hypocot/uniprot_sprot.fasta -out blastx.outfmt6 \
+        -evalue 1e-20 -num_threads 6 -max_target_seqs 1 -outfmt 6
+###########################################################################################################
+Ensequida, se examinó el porcentage del objetivo que está siendo alineado por el mejor transcrito de trinity coincidente:
+con el script trininy_tophits.sh
+########################################################################################################################
+#!/bin/bash
+#PBS -N bplus_th_170
+#PBS -l nodes=1:ppn=10,vmem=10gb,mem=10gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+
+module load ncbi-blast+/2.6.0
+module load trinity/2.4.0
+cd /LUSTRE/usuario/igarcia/hypocot/trinity_out_dir_170
+analyze_blastPlus_topHit_coverage.pl blastx.outfmt6 Trinity-GG.fasta /LUSTRE/usuario/igarcia/hypocot/uniprot_sprot.fasta
+########################################################################################################################
+
+Esto nos creó un archivo llamado "blast.outfmt6.txt.w_pct_hit_length" que añade campos al archivo output de blastx, incluyendo la longitud del hit superior, porcentaje de el hit de longitud incluido en la alineación con el transcrito de Trinity, y la descripción de encabezado para esa entrada de base de datos.
+
+Ademas, la distribución de porcentaje de covertura de longitud, Para las entradas de la base de datos de coincidencia superior se proporciona como sigue. En 
+nuestro caso para la libreria 170 el resultado fue el siguiente:
+#hit_pct_cov_bin    count_in_bin    >bin_below
+100 4599    4599
+90  760 5359
+80  761 6120
+70  889 7009
+60  1030    8039
+50  890 8929
+40  841 9770
+30  819 10589
+20  581 11170
+10  98  11268
+ 
+
+Solo el  mejor transcrito de trinity coincidente es reportado para cada entrada de la base de datos superior coincidente: en otras palabras, las entradas de la base de datos blanco se cuenta únicamente. Si una proteína blanco coincide con múltiples transcritos de Trinity como su mejor hit, que la proteína objetivo se cuenta sólo una vez junto con el transcrito de Trinity que proporciona el puntaje más alto de bit BLAST y la longitud de coincidencia más larga.
+Declaraciones podemos hacerlas basandonos en esta tabla:
+Hay 760 proteinas que coinciden con un transcrito de Trinity por >80% y <=90% de sus longitudes de proteínas. 
+Hay 5359 proteínas que están representadas por transcritos casi completos, teniendo >80% de alineación de covertura.
+Hay 4599 que cubrieron por mas del 90% de su longitud de proteinas.  
+
+Agrupando los hits de blast para mejorar su secuencia de covertura.
+Es a veces el caso que un transcrito simple se alineará a una secuencia sencialla de proteínas con varios alienamientos discontinuos (un hit de BLAST 
+conteniendo múltiples pares de segmentos de alto puntaje (HSPs)). EL enfoque de arriba solo considerará la mejor alineación. Sin embargo, mediante un proceso extendido a continuación, tu puedes agrupar aquellos múltiples HSPs por transcrito y hit de base de datos, y computar el alineamiento de covertura basado en
+los HSPs. Este proceso extendido inicia mediante el uso del mismo output de BLAST "blastx.outfmt6"
+
+Se agruparon los múltiples HSPs por transcrito/el pareado de la base de datos coincide así
+script:hsps_trinity.sh 
+########################################################################################################################
+#!/bin/bash
+#PBS -N hsps_170
+#PBS -l nodes=1:ppn=10,vmem=10gb,mem=10gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+
+module load ncbi-blast+/2.6.0
+module load trinity/2.4.0
+cd /LUSTRE/usuario/igarcia/hypocot/trinity_out_dir_170
+/LUSTRE/storage/data/software/trinityrnaseq-Trinity-v2.4.0/util/misc/blast_outfmt6_group_segments.pl \
+      blastx.outfmt6  Trinity-GG.fasta  /LUSTRE/usuario/igarcia/hypocot/uniprot_sprot.fasta > blastx.outfmt6_170.grouped
+ ########################################################################################################################
+Entonces computamos el porcentaje de covertura mediante el histograma de la longitud:
+script:grouped_cov.sh 
+#########################################################################################################################
+#!/bin/bash
+#PBS -N cov_170
+#PBS -l nodes=1:ppn=10,vmem=10gb,mem=10gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+
+
+module load trinity/2.4.0
+cd /LUSTRE/usuario/igarcia/hypocot/trinity_out_dir_170
+/LUSTRE/storage/data/software/trinityrnaseq-Trinity-v2.4.0/util/misc/blast_outfmt6_group_segments.tophit_coverage.pl blastx.outfmt6_170.grouped
+#############################################################################################################################################
+
+La tabla resultante tiene un formato idéntico como se describe arriba, pero es ahora basado en HSPs agrupados por transcrito/par de base de datos a diferencia de un solo HSP por emparejamiento.
+
+Lo siguiente fue evaluar con otra herramienta la calidad de nuestro ensamble mediante el programa BUSCO. Esta herrramienta nos proporciona mediciones 
+cuantitativas para la evaluación del ensamble del genoma, conjunto de genes e integridad del genoma, basado en espectativas evolutivamente-informadas de el
+contenido de genes de ortologos de única copia seleccionados de OrthoDB v9.
+El ensayo de BUSCO se implementa en un software de fuente abierta, con una gran seleccion de conjuntos de linajes específicos de Evaluación comparativa universa de ortologos de una copia sencilla. Estos ortologos conservados son candidatos ideales para estudios filogenéticos a gran escala, y los modelos de genes 
+anotados  BUSCO anotados construidos durante el ensamble del genoma proporciona un conjunto de entrenamiento exhaustivo predictor de genes para usar como 
+parte de los pipelines de anotación de genomas. 
+
+Par eso descargamos el data set para plantas. 
+Despues corrimos el siguiente script:
+################################################################################################################################
+#!/bin/bash
+#PBS -N busco_170
+#PBS -l nodes=1:ppn=10,vmem=10gb,mem=10gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+
+cd /LUSTRE/usuario/igarcia/hypocot/trinity_out_dir_170
+module load BUSCO/2.0.1
+module load ncbi-blast+/2.6.0
+module load augustus/2.5.5
+module load hmmer/3.1b2
+/LUSTRE/storage/data/software/busco/BUSCO.py -i Trinity-GG.fa -o arabidopsis -l /LUSTRE/usuario/igarcia/hypocot/embryophyta_odb9 -m tran
+#####################################################################################################################################
+cargamos las dependencias de blast, augustus y hmmer necesarias para el correcto funcionamiento de BUSCO.
+Fue necesario irnos a la carpeta de busco donde esta el programa BUSCO.py sin necesidad de escribir python. 
+También nos fue necesario cambiar la extensión de nuestro archivo "Trinity-GG.fasta" a "Trinity-GG-fa" para que el programa reconociera nuestro transcriptoma.
+La linea de comando es la siguiente -i es nuestro archivo fasta o fa en este caso.
+-o es el output 
+-l es el path de nuestro data set (linaje) el cual es de embriofitas para arabidopsis.
+Y -m es el modo en nuestro caso es modo para evaluar transcriptoma. 
+
+El output es una carpeta llamada en nuestro caso "run arabidopsis" con varios archivos:
+drwxrwxr-x 2 igarcia igarcia 4,0K abr 27 15:20 blast_output
+-rw-rw-r-- 1 igarcia igarcia  71K abr 27 16:14 full_table_arabidopsis.tsv
+drwxrwxr-x 2 igarcia igarcia 196K abr 27 16:14 hmmer_output
+-rw-rw-r-- 1 igarcia igarcia 5,4K abr 27 16:14 missing_busco_list_arabidopsis.tsv
+-rw-rw-r-- 1 igarcia igarcia  675 abr 27 16:14 short_summary_arabidopsis.txt
+drwxrwxr-x 2 igarcia igarcia 192K abr 27 16:03 translated_proteins
+
+Lunes 22 de Mayo 2017 
+
+En la carpeta "all_fasta" se agregaron los archivos con el filtro de calidad de Trimmomatic.
+Ahi se concatenaron las 57 librerias:
+SRR3480142.fastq.trimmed.fastq  SRR3480157.fastq.trimmed.fastq  SRR3480172.fastq.trimmed.fastq  SRR3480187.fastq.trimmed.fastq
+SRR3480143.fastq.trimmed.fastq  SRR3480158.fastq.trimmed.fastq  SRR3480173.fastq.trimmed.fastq  SRR3480188.fastq.trimmed.fastq
+SRR3480144.fastq.trimmed.fastq  SRR3480159.fastq.trimmed.fastq  SRR3480174.fastq.trimmed.fastq  SRR3480189.fastq.trimmed.fastq
+SRR3480145.fastq.trimmed.fastq  SRR3480160.fastq.trimmed.fastq  SRR3480175.fastq.trimmed.fastq  SRR3480190.fastq.trimmed.fastq
+SRR3480146.fastq.trimmed.fastq  SRR3480161.fastq.trimmed.fastq  SRR3480176.fastq.trimmed.fastq  SRR3480191.fastq.trimmed.fastq
+SRR3480147.fastq.trimmed.fastq  SRR3480162.fastq.trimmed.fastq  SRR3480177.fastq.trimmed.fastq  SRR3480192.fastq.trimmed.fastq
+SRR3480148.fastq.trimmed.fastq  SRR3480163.fastq.trimmed.fastq  SRR3480178.fastq.trimmed.fastq  SRR3480193.fastq.trimmed.fastq
+SRR3480149.fastq.trimmed.fastq  SRR3480164.fastq.trimmed.fastq  SRR3480179.fastq.trimmed.fastq  SRR3480194.fastq.trimmed.fastq
+SRR3480150.fastq.trimmed.fastq  SRR3480165.fastq.trimmed.fastq  SRR3480180.fastq.trimmed.fastq  SRR3480195.fastq.trimmed.fastq
+SRR3480151.fastq.trimmed.fastq  SRR3480166.fastq.trimmed.fastq  SRR3480181.fastq.trimmed.fastq  SRR3480196.fastq.trimmed.fastq
+SRR3480152.fastq.trimmed.fastq  SRR3480167.fastq.trimmed.fastq  SRR3480182.fastq.trimmed.fastq  SRR3480197.fastq.trimmed.fastq
+SRR3480153.fastq.trimmed.fastq  SRR3480168.fastq.trimmed.fastq  SRR3480183.fastq.trimmed.fastq  SRR3480198.fastq.trimmed.fastq
+SRR3480154.fastq.trimmed.fastq  SRR3480169.fastq.trimmed.fastq  SRR3480184.fastq.trimmed.fastq
+SRR3480155.fastq.trimmed.fastq  SRR3480170.fastq.trimmed.fastq  SRR3480185.fastq.trimmed.fastq
+SRR3480156.fastq.trimmed.fastq  SRR3480171.fastq.trimmed.fastq  SRR3480186.fastq.trimmed.fastq
+
+lo cual nos dió un archivo de más de 300 GB big_file.fasta
+Se mapeo este archivo con tophat  "tophat_results_allfasta.sh" con 1000 de máximo de intrones:
+-----------------------------------------------------------------------------------------------------------------------------
+#PBS -N tophat_af
+#PBS -l nodes=1:ppn=25,vmem=50gb:mem=50gb,walltime=500:00:00
+#PBS -q default
+#PBS -V
+
+
+
+cd /LUSTRE/usuario/igarcia/all_fasta
+module load bowtie2/2.2.9
+module load  tophat/2.1.1
+#for file in *.trimmed.fastq
+#do
+tophat -i 20 -I 1000 --read-edit-dist 3 --read-realign-edit-dist 0 --library-type fr-firststrand \
+-g 1 -p 25 -o tophat_out_all TAIR10_chr_all bigfile.fastq
+#done
+
+----------------------------------------------------------------------------------------------------------------------------
+ y  tophat_results_allfasta_4000in.sh para un máximo de 4000 intrones 
+############################################################################################################################
+25 de Mayo 2017
+
+Antes de hacer un ensamble guiado, se tiene que hacer un sort de nuestro archivo "accepted_hits", output que nos da Tophat:
+
+---------------------------------------------------------------------------------------------------------------------------
+#PBS -N samt_sort_all_1000
+#PBS -l nodes=1:ppn=10,vmem=10gb:mem=10gb,walltime=200:00:00
+#PBS -q default
+#PBS -V
+
+cd /LUSTRE/usuario/igarcia/all_fasta/tophat_out_all
+module load  samtools/1.3.1
+samtools sort accepted_hits_concatenated.bam -o all_con_sorted1.bam
+---------------------------------------------------------------------------------------------------------------------------
+
+26 de Mayo de 2017
+
+Se procedio ha hacer el ensamble guiado con Trinity para los dos parametros 1000 intrones y 4000 intrones:
+--------------------------------------------------------------------------------------------------------------------------
+#PBS -N trinity_con_1000in
+#PBS -l nodes=1:ppn=20,vmem=500gb:mem=500gb,walltime=500:00:00
+#PBS -q ensam
+#PBS -V
+
+
+module load trinity/2.4.0
+module load  java/1.8
+cd /LUSTRE/usuario/igarcia/all_fasta
+Trinity --genome_guided_bam tophat_out_all/all_con_sorted1.bam --output Trinity_guided_1000in --max_memory 500G \
+        --jaccard_clip --genome_guided_max_intron 1000 --CPU 20 \
+> terminal_trinity_1000.txt
+--------------------------------------------------------------------------------------------------------------------------
+#PBS -N trinity_con_4000in
+#PBS -l nodes=1:ppn=20,vmem=500gb:mem=500gb,walltime=500:00:00
+#PBS -q ensam
+#PBS -V
+
+
+module load trinity/2.4.0
+module load  java/1.8
+cd /LUSTRE/usuario/igarcia/all_fasta
+Trinity --genome_guided_bam tophat_out_all_4000in/all_con_sorted1.bam --output Trinity_guided_4000in --max_memory 500G \
+        --jaccard_clip --genome_guided_max_intron 4000 --CPU 20 \
+> terminal_trinity_4000.txt
+
+-------------------------------------------------------------------------------------------------------------------------
+
+29 de Mayo de 2017 
+
+Se hizo la evaluación a nuestro ensamble con BUSCO usando el script "busco_ensam.sh" en el directorio "all_fasta" obteneindo los siguientes 
+resultados:
+-----------------------------------------------------------------------------------------------------------------------------------------
+# BUSCO version is: 2.0.1 
+# The lineage dataset is: embryophyta_odb9 (Creation date: 2016-02-13, number of species: 30, number of BUSCOs: 1440)
+# To reproduce this run: python /LUSTRE/storage/data/software/busco/BUSCO.py -i Trinity-GG.fa -o arabidopsis -l /LUSTRE/usuario/igarcia/all_fasta/embryophyta_odb9/ -m tran -c 1 -sp arabidopsis
+#
+# Summarized benchmarking in BUSCO notation for file Trinity-GG.fa
+# BUSCO was run in mode: tran
+
+    C:97.1%[S:65.6%,D:31.5%],F:1.7%,M:1.2%,n:1440
+
+    1398    Complete BUSCOs (C)
+    945 Complete and single-copy BUSCOs (S)
+    453 Complete and duplicated BUSCOs (D)
+    24  Fragmented BUSCOs (F)
+    18  Missing BUSCOs (M)
+    1440    Total BUSCO groups searched
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+También se empezará a ensamblar con cufflinks por lo cual se hizo un directorio llamado ensam_cufflinks
+ahi se almacenaron los mapeos con tophat. Se realizó el mapeo con tophat con el siguiente comando:
+#########################################################################################################################################
+
+#PBS -N tophat_h_170
+#PBS -l nodes=2:ppn=16,vmem=10gb:mem=10gb,walltime=50:00:00
+#PBS -q default
+#PBS -V
+
+
+
+cd /LUSTRE/usuario/igarcia/hypocot
+module load bowtie2/2.2.9
+module load  tophat/2.1.1
+
+tophat -i 20 -I 1000 --read-edit-dist 3 --read-realign-edit-dist 0 --library-type fr-firststrand \
+-g 1 -o tophat_out_170_1000in TAIR10_chr_all SRR3480170.fastq.trimmed.fastq
+##########################################################################################################################################
+Una vez teniendo todos los mapeos se procedio a ensamblar con cufflinks con el siguiente comando:
+#########################################################################################################################################
+#PBS -N cuff_142
+#PBS -l nodes=1:ppn=16,vmem=10gb:mem=10gb,walltime=50:00:00
+#PBS -q default
+#PBS -V
+
+
+module load cufflinks/2.2.1
+cd /LUSTRE/usuario/igarcia/ensam_cufflinks
+cufflinks --overlap-radius 1 \
+             -g /LUSTRE/usuario/igarcia/hypocot/TAIR_gff/TAIR10_GFF3_genes.gff --library-type fr-firststrand \
+             -o cufflinks_142_dir c_tophat_out_142/cot_142.bam
+#########################################################################################################################################
+A nuestra salida de tophat "accepted_hits.bam" la nombramos "cot_142.bam" dependiendo del tejido, en este caso cot de cotyledon y 142 es el número de la librería 
+En un archivo llamado "assemblies.txt" colocamos la lista de los archivos gtf que resultaron del cufflinks
+cufflinks_142_dir/c_142.transcripts.gtf
+cufflinks_143_dir/h_143.transcripts.gtf
+cufflinks_144_dir/c_144.transcripts.gtf
+cufflinks_145_dir/h_145.transcripts.gtf
+cufflinks_146_dir/h_146.transcripts.gtf
+cufflinks_147_dir/c_147.transcripts.gtf
+cufflinks_148_dir/h_148.transcripts.gtf
+cufflinks_149_dir/h_149.transcripts.gtf
+cufflinks_150_dir/c_150.transcripts.gtf
+cufflinks_151_dir/h_151.transcripts.gtf
+cufflinks_152_dir/h_152.transcripts.gtf
+cufflinks_153_dir/c_153.transcripts.gtf
+cufflinks_154_dir/h_154.transcripts.gtf
+cufflinks_155_dir/c_155.transcripts.gtf
+cufflinks_156_dir/h_156.transcripts.gtf
+cufflinks_157_dir/c_157.transcripts.gtf
+cufflinks_158_dir/c_158.transcripts.gtf
+cufflinks_159_dir/h_159.transcripts.gtf
+cufflinks_160_dir/h_160.transcripts.gtf
+cufflinks_161_dir/c_161.transcripts.gtf
+cufflinks_162_dir/h_162.transcripts.gtf
+cufflinks_163_dir/h_163.transcripts.gtf
+cufflinks_164_dir/c_164.transcripts.gtf
+cufflinks_165_dir/c_165.transcripts.gtf
+cufflinks_166_dir/h_166.transcripts.gtf
+cufflinks_167_dir/h_167.transcripts.gtf
+cufflinks_168_dir/c_168.transcripts.gtf
+cufflinks_169_dir/h_169.transcripts.gtf
+cufflinks_170_dir/h_170.transcripts.gtf
+cufflinks_171_dir/c_171.transcripts.gtf
+cufflinks_172_dir/c_172.transcripts.gtf
+cufflinks_173_dir/h_173.transcripts.gtf
+cufflinks_174_dir/h_174.transcripts.gtf
+cufflinks_175_dir/c_175.transcripts.gtf
+cufflinks_176_dir/c_176.transcripts.gtf
+cufflinks_177_dir/h_177.transcripts.gtf
+cufflinks_178_dir/h_178.transcripts.gtf
+cufflinks_179_dir/c_179.transcripts.gtf
+cufflinks_181_dir/h_181.transcripts.gtf
+cufflinks_180_dir/h_180.transcripts.gtf
+cufflinks_182_dir/c_182.transcripts.gtf
+cufflinks_183_dir/c_183.transcripts.gtf
+cufflinks_184_dir/h_184.transcripts.gtf
+cufflinks_185_dir/h_185.transcripts.gtf
+cufflinks_186_dir/c_186.transcripts.gtf
+cufflinks_187_dir/c_187.transcripts.gtf
+cufflinks_188_dir/h_188.transcripts.gtf
+cufflinks_189_dir/c_189.transcripts.gtf
+cufflinks_190_dir/h_190.transcripts.gtf
+cufflinks_191_dir/h_191.transcripts.gtf
+cufflinks_192_dir/c_192.transcripts.gtf
+cufflinks_193_dir/c_193.transcripts.gtf
+cufflinks_194_dir/h_194.transcripts.gtf
+cufflinks_195_dir/h_195.transcripts.gtf
+cufflinks_196_dir/c_196.transcripts.gtf
+cufflinks_197_dir/c_197.transcripts.gtf
+cufflinks_198_dir/h_198.transcripts.gtf
+
+Despues ejecutamos el script merge para unificar los archivos:
+############################################################################
+#PBS -N cuff_m
+#PBS -l nodes=1:ppn=16,vmem=12gb:mem=12gb,walltime=100:00:00
+#PBS -q default
+#PBS -V
+
+module load cufflinks/2.2.1
+cd /LUSTRE/usuario/igarcia/ensam_cufflinks
+cuffmerge -p 8 -g /LUSTRE/usuario/igarcia/ensam_cufflinks/TAIR_gff/TAIR10_GFF3_genes.gff \
+               -s /LUSTRE/usuario/igarcia/hypocot/TAIR10_chr_all.fa assemblies.txt
+###########################################################################
+Esto nos dio una carpeta llamada "merged_asm"
+La cual contiene un merged.gtf
+----------------------------------------------------------------------------------------
+12 de Julio 2017
+
+Se realizaron las pruebas correspondientes de anotación:
+Primero instalamos sqlite en nuestra computadora:
+#################################################
+sudo apt-get install sqlite3 libsqlite3-dev
+################################################
+
+Descargamos las bases de datos: 
+Trinotate 3.0.0
+SwissProtPfam-A
+
+Y los programas ejecutables:
+
+ signalP v4
+ tmhmm v2
+
+Descomprimimos estos archivos dando doble click en la carpeta Downloads. Los dejaremos en esta carpeta para los propósitos de esta 
+práctica. Editaremos el archivo signalP haciendo doble click en el archivo llamado signalP. Cambiaremos la línea:
+
+ENV{SIGNALP} = '/usr/cbs/bio/src/signalp-4.1'
+
+por
+
+ENV{SIGNALP} = '/home/usuario/Downloads/signalp-4.1'
+
+y en el archivo tmhmm y thmhmmformat.pl
+
+!/usr/local/bin/perl
+
+por
+
+!/usr/bin/perl
+
+También descargaremos y descomprimiremos el templato de la base de datos del Broad Institute.
+$ wget "https://data.broadinstitute.org/Trinity/Trinotate_v3_RESOURCES/Trinotate_v3.sqlite.gz" 
+$ wget "https://data.broadinstitute.org/Trinity/Trinotate_v3_RESOURCES/uniprot_sprot.pep.gz" 
+$ wget "https://data.broadinstitute.org/Trinity/Trinotate_v3_RESOURCES/Pfam-A.hmm.gz" 
+$ gunzip Trinotate_v3.sqlite.gz
+
+Primero vamos a extraer los marcos de lectura abiertos (ORF) de los transcritos.
+Vamos a generar (predecir) las secuencias de proteinas en estos transcritos usando el programa TransDecoder.
+###############################################
+$ TransDecoder.LongOrfs -t Trinity-GG.fasta
+$ TransDecoder.Predict -t Trinity-GG.fasta
+###############################################
+
+TransDecoder genera los siguientes archivos principales:
+
+    Trinity.fasta.transdecoder.pep: Secuencias peptídicas de los ORFs identificados.
+    Trinity.fasta.transdecoder.mRNA: Secuencias nucleotídicas de estos ORFs.
+
+Despues vamos a Ejecutar programas de información para la anotación.
+Movemos las bases de datos uniprot_sprot.pep.gz y Pfam-A.hmm.gz al directorio "anotation".
+
+Preparamos las bases de datos de BLAST:
+
+##############################################
+#!/bin/bash
+#PBS -N m_blastdb
+#PBS -l nodes=1:ppn=4,vmem=8gb,mem=8gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+
+cd /LUSTRE/usuario/igarcia/all_fasta/anotation
+module load ncbi-blast+/2.2.31
+makeblastdb -in uniprot_sprot.pep -dbtype prot
+
+#############################################
+
+y de hmmer
+
+##############################################
+!/bin/bash
+#PBS -N hmmpress
+#PBS -l nodes=1:ppn=4,vmem=8gb,mem=8gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+
+cd /LUSTRE/usuario/igarcia/all_fasta/anotation
+module load  hmmer/3.1b2
+hmmpress Pfam-A.hmm
+##############################################
+
+Ejecutamos entonces la búsqueda de homólogos por BLAST:
+Blastx y Blastp
+
+#######################################################
+#!/bin/bash
+#PBS -N blast_x
+#PBS -l nodes=1:ppn=16,vmem=8gb,mem=8gb,walltime=48:00:00
+#PBS -q default
+#PBS -V
+
+cd /LUSTRE/usuario/igarcia/all_fasta/anotation
+module load  ncbi-blast+/2.2.31
+blastx -query Trinity-GG.fasta -db uniprot_sprot.pep -num_threads 8 -max_target_seqs 1 -outfmt 6 > blastx.outfmt6
+########################################################
+
+!/bin/bash
+#PBS -N blast_p
+#PBS -l nodes=1:ppn=16,vmem=8gb,mem=8gb,walltime=48:00:00
+#PBS -q default
+#PBS -V
+
+cd /LUSTRE/usuario/igarcia/all_fasta/anotation
+module load  ncbi-blast+/2.2.31
+blastp -query Trinity-GG.fasta.transdecoder.pep -db uniprot_sprot.pep -num_threads 8 -max_target_seqs 1 -outfmt 6 > blastp.outfmt6
+########################################################
+#!/bin/bash
+#PBS -N hmmscan
+#PBS -l nodes=1:ppn=8,vmem=8gb,mem=8gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+
+cd /LUSTRE/usuario/igarcia/all_fasta/anotation
+module load  hmmer/3.1b2
+hmmscan --cpu 8 --domtblout TrinotatePFAM.out Pfam-A.hmm Trinity-GG.fasta.transdecoder.pep > pfam.log
+#######################################################
+$ ~/Downloads/signalp-4.1/signalp -t euk -f short -n signalp.out Trinity.fasta.transdecoder.pep > signalp.log
+######################################################
+~/Downloads/tmhmm-2.0c/tmhmm --short < Trinity.fasta.transdecoder.pep > tmhmm.out
+#####################################################
+
+El último paso consiste en agregar los resultados de la anotación a la base de datos.
+Primero creamos un archivo que especifique que transcrito corresponde a que proteina:
+####################################################
+get_Trinity_gene_to_trans_map.pl Trinity-GG.fasta >  Trinity.GG-fasta.gene_trans_map
+###################################################
+Iniciamos la base de datos importando el transcriptoma y ORFs:
+
+#PBS -N Trinot_ensam
+#PBS -l nodes=1:ppn=8,vmem=8gb,mem=8gb,walltime=10:00:00
+#PBS -q default
+#PBS -V
+
+cd /LUSTRE/usuario/igarcia/all_fasta/anotation
+module load Trinotate/3.0
+Trinotate Trinotate_v3.sqlite  init --gene_trans_map Trinity-GG.fasta.gene_trans_map --transcript_fasta Trinity-GG.fasta \
+                                    --transdecoder_pep Trinity-GG.fasta.transdecoder.pep
+Trinotate Trinotate_v3.sqlite  LOAD_swissprot_blastp blastp.outfmt6
+Trinotate Trinotate_v3.sqlite  LOAD_swissprot_blastx blastx.outfmt6
+Trinotate Trinotate_v3.sqlite  LOAD_pfam TrinotatePFAM.out
+Trinotate Trinotate_v3.sqlite  LOAD_tmhmm tmhmm.out
+Trinotate Trinotate_v3.sqlite  LOAD_signalp signalp.out
+
+Trinotate Trinotate_v3.sqlite  report > Trinotate_annotation_report.xls
+
+El reporte Trinotate_annotation_report.xls contiene las siguientes columnas
+Este reporte tiene las siguientes columnas:
+
+    #gene_id
+    transcript_id
+    sprot_Top_BLASTX_hit
+    RNAMMER
+    prot_id
+    prot_coords
+    sprot_Top_BLASTP_hit
+    pep_BLASTX
+    pep_BLASTP
+    Pfam
+    SignalP
+    TmHMM
+    eggnog
+    Kegg
+    gene_ontology_blast
+    gene_ontology_pfam
+    transcript
+    peptide
+
+13 de Junio de 2017 
+
+Se descargó el programa cpc local y tambien se instalo en mazorka.
+CPC (Calculador Potencial de Codificacion) es un clasificador basado en Maquinas de soporte de vectores para medir el potencial de 
+codificacion de un transcrito (i.e si un transcrito cDNA/RNA podria codificar un peptido o no) basado en seis caracteristicas 
+biológicamente significativas de la secuencia. Toma las secuencias FASTA como input, y genera un output acerca el estado de 
+codificación y la "evidencia de apoyo" para la secuencia.
+
+CPC trabaja con blastall y necesita una base de datos de uniref90 de uniprot. 
+Se decargo la base de datos uniref90.
+La base de datos de debera llamar "prot_db"
+
+b. Build third-part packages: 
+
+tom@linux$ cd cpc-0.9-r2
+tom@linux$ export CPC_HOME="$PWD"
+tom@linux$ cd libs/libsvm
+tom@linux$ gzip -dc libsvm-2.81.tar.gz | tar xf -
+tom@linux$ cd libsvm-2.81
+tom@linux$ make clean && make
+tom@linux$ cd ../..
+tom@linux$ gzip -dc estate.tar.gz | tar xf -
+tom@linux$ cd estate
+tom@linux$ make clean && make
+
+c. Format BLAST database, named it as "prot_db", and put under the
+cpc/data/.
+
+tom@linux$ cd $CPC_HOME/data
+tom@linux$ formatdb -i (prot_db) -p T -n prot_db
+
+Correr la predicción:
+$ bin/run_predict.sh (Trinity-GG.fasta) (result_in_table) (working_dir) (result_evidence)
+
+ 
+
 
